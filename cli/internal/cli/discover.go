@@ -201,16 +201,23 @@ func runDiscover(cmd *cobra.Command, args []string) error {
 
 		fmt.Printf("  ✓ %s (port %d)\n", wt.Name, serverPort)
 
-		if start && cmdToUse != "" {
-			// Start the server
-			fmt.Printf("    Starting with: %s\n", cmdToUse)
-			startCmd := exec.Command("grove", "start", cmdToUse)
+		if start {
+			startArgs := []string{"start"}
+			if cmdToUse != "" {
+				startArgs = append(startArgs, cmdToUse)
+				fmt.Printf("    Starting with: %s\n", cmdToUse)
+			} else if wt.HasConfig {
+				fmt.Printf("    Starting with command from .grove.yaml\n")
+			} else {
+				fmt.Printf("    ! Skipped start for %s: no command resolved (use -c <command> or add command to .grove.yaml)\n", wt.Name)
+				continue
+			}
+
+			startCmd := exec.Command("grove", startArgs...)
 			startCmd.Dir = wt.Path
 			if err := startCmd.Run(); err != nil {
 				fmt.Printf("    ✗ Failed to start: %v\n", err)
 			}
-		} else if start {
-			fmt.Printf("    ! Skipped start for %s: no command resolved (use -c <command> or run 'cd %s && grove start')\n", wt.Name, wt.Path)
 		}
 	}
 
