@@ -238,65 +238,97 @@ struct MenuView: View {
 
             // Servers
             if scopedServers.isEmpty {
-                // Enhanced empty state with onboarding
-                VStack(spacing: 12) {
-                    Image(systemName: "tree.fill")
-                        .font(.system(size: 36))
-                        .foregroundColor(.grovePrimary.opacity(0.6))
+                Group {
+                if serverManager.servers.isEmpty {
+                    // Truly empty: no data at all – show onboarding
+                    VStack(spacing: 12) {
+                        Image(systemName: "tree.fill")
+                            .font(.system(size: 36))
+                            .foregroundColor(.grovePrimary.opacity(0.6))
 
-                    Text("No worktrees found")
-                        .font(.headline)
-                        .foregroundColor(.primary)
+                        Text("No worktrees found")
+                            .font(.headline)
+                            .foregroundColor(.primary)
 
-                    Text("Get started by running:")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        Text("Get started by running:")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
 
-                    HStack(spacing: 8) {
-                        Text("grove discover --register")
-                            .font(.system(.caption, design: .monospaced))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Color(NSColor.textBackgroundColor))
-                            .cornerRadius(6)
+                        HStack(spacing: 8) {
+                            Text("grove discover --register")
+                                .font(.system(.caption, design: .monospaced))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color(NSColor.textBackgroundColor))
+                                .cornerRadius(6)
+
+                            Button {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString("grove discover --register", forType: .string)
+                                withAnimation {
+                                    currentToast = .success("Copied to clipboard")
+                                    showCopiedToast = true
+                                }
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .help("Copy command")
+                        }
+
+                        Text("This will find your git worktrees\nand register them with Grove.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 4)
 
                         Button {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString("grove discover --register", forType: .string)
-                            withAnimation {
-                                currentToast = .success("Copied to clipboard")
-                                showCopiedToast = true
-                            }
+                            serverManager.openTUI()
                         } label: {
-                            Image(systemName: "doc.on.doc")
+                            HStack {
+                                Image(systemName: "terminal")
+                                Text("Open Terminal")
+                            }
+                            .font(.caption)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.grovePrimary)
+                        .controlSize(.small)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+                } else {
+                    // Scope filter excludes all entries
+                    VStack(spacing: 8) {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                            .font(.system(size: 28))
+                            .foregroundColor(.secondary.opacity(0.6))
+
+                        Text("No matching worktrees")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+
+                        Text("All worktrees are hidden by the current scope filter (\(preferences.menubarScope.displayName)).")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+
+                        Button {
+                            preferences.menubarScope = .allWorktrees
+                        } label: {
+                            Text("Show All Worktrees")
                                 .font(.caption)
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.borderedProminent)
+                        .tint(.grovePrimary)
                         .controlSize(.small)
-                        .help("Copy command")
                     }
-
-                    Text("This will find your git worktrees\nand register them with Grove.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.top, 4)
-
-                    Button {
-                        serverManager.openTUI()
-                    } label: {
-                        HStack {
-                            Image(systemName: "terminal")
-                            Text("Open Terminal")
-                        }
-                        .font(.caption)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.grovePrimary)
-                    .controlSize(.small)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 24)
+                }
                 .padding(.horizontal)
             } else if filteredServers.isEmpty {
                 VStack(spacing: 12) {

@@ -408,6 +408,36 @@ func (m EnhancedModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.notification = NewNotification(msg.Message, msg.Type)
 		return m, nil
 
+	case SyncPortsCompleteMsg:
+		if msg.Err != nil {
+			m.notification = NewNotification(
+				fmt.Sprintf("Port sync failed for %s: %s", msg.ServerName, msg.Err),
+				NotificationError,
+			)
+			return m, nil
+		}
+		// Reload registry on the main goroutine to avoid data races.
+		if reg, loadErr := registry.Load(); loadErr == nil {
+			m.reg = reg
+			if m.list.FilterState() == list.Unfiltered {
+				m.list.SetItems(makeEnhancedItems(m.reg))
+			}
+		}
+		syncedMarker := fmt.Sprintf("✓ %s: synced", msg.ServerName)
+		if strings.Contains(msg.OutputText, syncedMarker) {
+			m.notification = NewNotification(
+				fmt.Sprintf("Synced port for %s", msg.ServerName),
+				NotificationSuccess,
+			)
+		} else {
+			text := msg.OutputText
+			if text == "" {
+				text = fmt.Sprintf("No port change for %s", msg.ServerName)
+			}
+			m.notification = NewNotification(text, NotificationInfo)
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		// When actively filtering (typing in filter input), let the list handle most keys
 		// But when filter is just "applied" (showing results), allow action keys
@@ -684,9 +714,9 @@ func (m *EnhancedModel) syncSelectedServerPorts() tea.Cmd {
 	return func() tea.Msg {
 		exe, err := os.Executable()
 		if err != nil {
-			return NotificationMsg{
-				Message: fmt.Sprintf("Failed to locate grove executable: %v", err),
-				Type:    NotificationError,
+			return SyncPortsCompleteMsg{
+				ServerName: server.Name,
+				Err:        err,
 			}
 		}
 
@@ -697,36 +727,15 @@ func (m *EnhancedModel) syncSelectedServerPorts() tea.Cmd {
 			if msg == "" {
 				msg = err.Error()
 			}
-			return NotificationMsg{
-				Message: fmt.Sprintf("Port sync failed for %s: %s", server.Name, msg),
-				Type:    NotificationError,
+			return SyncPortsCompleteMsg{
+				ServerName: server.Name,
+				Err:        fmt.Errorf("%s", msg),
 			}
 		}
 
-		if reg, loadErr := registry.Load(); loadErr == nil {
-			m.reg = reg
-			if m.list.FilterState() == list.Unfiltered {
-				m.list.SetItems(makeEnhancedItems(m.reg))
-			}
-		}
-
-		outputText := strings.TrimSpace(string(output))
-		syncedMarker := fmt.Sprintf("✓ %s: synced", server.Name)
-		if strings.Contains(outputText, syncedMarker) {
-			return NotificationMsg{
-				Message: fmt.Sprintf("Synced port for %s", server.Name),
-				Type:    NotificationSuccess,
-			}
-		}
-
-		// Command succeeded but no actual update was performed.
-		if outputText == "" {
-			outputText = fmt.Sprintf("No port change for %s", server.Name)
-		}
-
-		return NotificationMsg{
-			Message: outputText,
-			Type:    NotificationInfo,
+		return SyncPortsCompleteMsg{
+			OutputText: strings.TrimSpace(string(output)),
+			ServerName: server.Name,
 		}
 	}
 }

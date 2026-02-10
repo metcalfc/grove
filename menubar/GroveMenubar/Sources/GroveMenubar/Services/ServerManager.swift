@@ -1263,6 +1263,9 @@ class ServerManager: ObservableObject {
             defer { semaphore.signal() }
             guard case .success(let output) = result else { return }
 
+            // Collect all listening ports and return the smallest one,
+            // matching the Go GetPrimaryListeningPortByPID heuristic.
+            var ports: [Int] = []
             for line in output.split(separator: "\n").dropFirst() {
                 guard let listenRange = line.range(of: "(LISTEN)") else { continue }
                 let prefix = line[..<listenRange.lowerBound]
@@ -1270,10 +1273,10 @@ class ServerManager: ObservableObject {
                 let afterColon = prefix[prefix.index(after: colonIndex)...]
                 let portDigits = afterColon.prefix { $0.isNumber }
                 if let port = Int(portDigits), (1...65535).contains(port) {
-                    detectedPort = port
-                    return
+                    ports.append(port)
                 }
             }
+            detectedPort = ports.min()
         }
 
         _ = semaphore.wait(timeout: .now() + 2.0)

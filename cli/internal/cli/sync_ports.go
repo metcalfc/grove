@@ -115,6 +115,13 @@ func runSyncPorts(cmd *cobra.Command, args []string) error {
 		fmt.Printf("✓ %s: synced :%d -> :%d\n", s.Name, oldPort, actualPort)
 	}
 
+	// Reload proxy to pick up changed routes (only in subdomain mode)
+	if updated > 0 && cfg.IsSubdomainMode() {
+		if err := ReloadProxy(); err != nil {
+			fmt.Printf("Warning: failed to reload proxy: %v\n", err)
+		}
+	}
+
 	fmt.Printf("\nSummary: %d updated, %d unchanged, %d skipped\n", updated, unchanged, skipped)
 	return nil
 }

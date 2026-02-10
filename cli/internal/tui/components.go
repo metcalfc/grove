@@ -74,6 +74,14 @@ type NotificationMsg struct {
 	Type    NotificationType
 }
 
+// SyncPortsCompleteMsg is sent when a sync-ports command finishes.
+// The registry reload is performed in Update (main goroutine) to avoid races.
+type SyncPortsCompleteMsg struct {
+	OutputText string
+	ServerName string
+	Err        error
+}
+
 // ActionPanel represents the quick actions panel
 type ActionPanel struct {
 	Actions []Action
