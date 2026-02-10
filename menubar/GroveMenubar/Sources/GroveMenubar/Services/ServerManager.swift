@@ -377,6 +377,47 @@ class ServerManager: ObservableObject {
         }
     }
 
+    /// Re-sync a server's registered port with the process' detected listening port
+    /// without restarting the underlying process.
+    func syncRegistryPortToDetected(_ server: Server) {
+        guard let actualPort = detectedPort(for: server), actualPort > 0 else {
+            reportError("Unable to detect runtime port for \(server.name).")
+            return
+        }
+
+        guard hasPortMismatch(for: server) else {
+            return
+        }
+
+        runGrove(["detach", server.name]) { [weak self] detachResult in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch detachResult {
+                case .success:
+                    var args = ["attach", String(actualPort), "--name", server.name]
+                    if let pid = server.pid, pid > 0 {
+                        args.append(contentsOf: ["--pid", String(pid)])
+                    }
+                    self.runGroveInDirectory(server.path, args: args) { [weak self] attachResult in
+                        DispatchQueue.main.async {
+                            guard let self else { return }
+                            switch attachResult {
+                            case .success:
+                                self.refresh()
+                            case .failure(let error):
+                                self.reportError("Failed to sync port for \(server.name): \(error.localizedDescription)")
+                                self.refresh()
+                            }
+                        }
+                    }
+                case .failure(let error):
+                    self.reportError("Failed to sync port for \(server.name): \(error.localizedDescription)")
+                    self.refresh()
+                }
+            }
+        }
+    }
+
     // MARK: - Group Actions
 
     func startAllInGroup(_ group: ServerGroup) {

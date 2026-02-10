@@ -935,6 +935,14 @@ struct ServerRowView: View {
         return port
     }
 
+    private var hasRuntimePortMismatch: Bool {
+        serverManager.hasPortMismatch(for: server)
+    }
+
+    private var detectedRuntimePort: Int? {
+        serverManager.detectedPort(for: server)
+    }
+
     private func openPortOverrideSheet() {
         portOverrideInput = server.port.map(String.init) ?? ""
         showPortOverrideSheet = true
@@ -979,8 +987,7 @@ struct ServerRowView: View {
                                     .font(.system(.caption, design: .monospaced))
                                     .foregroundColor(.grovePrimary)
 
-                                if serverManager.hasPortMismatch(for: server),
-                                   let actualPort = serverManager.detectedPort(for: server) {
+                                if hasRuntimePortMismatch, let actualPort = detectedRuntimePort {
                                     Text("→:\(actualPort)")
                                         .font(.system(.caption2, design: .monospaced))
                                         .foregroundColor(.orange)
@@ -1137,6 +1144,12 @@ struct ServerRowView: View {
                         }
                     }
 
+                    if hasRuntimePortMismatch, let actualPort = detectedRuntimePort {
+                        ActionChip(icon: "number", label: "Sync :\(actualPort)") {
+                            serverManager.syncRegistryPortToDetected(server)
+                        }
+                    }
+
                     Spacer()
 
                     // More menu for less common actions
@@ -1168,6 +1181,16 @@ struct ServerRowView: View {
                         }
 
                         Divider()
+
+                        if hasRuntimePortMismatch, let actualPort = detectedRuntimePort {
+                            Button {
+                                serverManager.syncRegistryPortToDetected(server)
+                            } label: {
+                                Label("Sync to Detected Port (:\(actualPort))", systemImage: "number")
+                            }
+
+                            Divider()
+                        }
 
                         if server.isRunning {
                             Button {
@@ -1348,6 +1371,16 @@ struct ServerRowView: View {
             }
 
             Divider()
+
+            if hasRuntimePortMismatch, let actualPort = detectedRuntimePort {
+                Button {
+                    serverManager.syncRegistryPortToDetected(server)
+                } label: {
+                    Label("Sync to Detected Port (:\(actualPort))", systemImage: "number")
+                }
+
+                Divider()
+            }
 
             if server.isRunning {
                 Button {
