@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
 	"syscall"
@@ -32,6 +33,7 @@ type EnhancedKeyMap struct {
 	Logs          key.Binding
 	AllLogs       key.Binding
 	Refresh       key.Binding
+	SyncPorts     key.Binding
 	Up            key.Binding
 	Down          key.Binding
 	StartProxy    key.Binding
@@ -78,6 +80,10 @@ var enhancedKeys = EnhancedKeyMap{
 	Refresh: key.NewBinding(
 		key.WithKeys("F5"),
 		key.WithHelp("F5", "refresh"),
+	),
+	SyncPorts: key.NewBinding(
+		key.WithKeys("y"),
+		key.WithHelp("y", "sync ports"),
 	),
 	Up: key.NewBinding(
 		key.WithKeys("up", "k"),
@@ -453,6 +459,9 @@ func (m EnhancedModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
+		case key.Matches(msg, enhancedKeys.SyncPorts):
+			return m, m.syncSelectedServerPorts()
+
 		case key.Matches(msg, enhancedKeys.StartProxy):
 			return m, m.toggleProxy()
 
@@ -659,6 +668,50 @@ func (m *EnhancedModel) restartServer() tea.Cmd {
 		return NotificationMsg{
 			Message: fmt.Sprintf("Restart %s with: grove restart %s", server.Name, server.Name),
 			Type:    NotificationInfo,
+		}
+	}
+}
+
+func (m *EnhancedModel) syncSelectedServerPorts() tea.Cmd {
+	if m.list.SelectedItem() == nil {
+		return nil
+	}
+
+	item := m.list.SelectedItem().(EnhancedServerItem)
+	server := item.server
+
+	return func() tea.Msg {
+		exe, err := os.Executable()
+		if err != nil {
+			return NotificationMsg{
+				Message: fmt.Sprintf("Failed to locate grove executable: %v", err),
+				Type:    NotificationError,
+			}
+		}
+
+		cmd := exec.Command(exe, "sync-ports", server.Name)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			msg := strings.TrimSpace(string(output))
+			if msg == "" {
+				msg = err.Error()
+			}
+			return NotificationMsg{
+				Message: fmt.Sprintf("Port sync failed for %s: %s", server.Name, msg),
+				Type:    NotificationError,
+			}
+		}
+
+		if reg, loadErr := registry.Load(); loadErr == nil {
+			m.reg = reg
+			if m.list.FilterState() == list.Unfiltered {
+				m.list.SetItems(makeEnhancedItems(m.reg))
+			}
+		}
+
+		return NotificationMsg{
+			Message: fmt.Sprintf("Synced ports for %s", server.Name),
+			Type:    NotificationSuccess,
 		}
 	}
 }

@@ -310,6 +310,7 @@ grove ui
 | `c` | Copy server URL |
 | `l` | View logs |
 | `L` | View all logs (split/multi view) |
+| `y` | Sync registry port to detected runtime port |
 | `p` | Toggle proxy |
 | `a` | Toggle action panel |
 | `F5` | Refresh list |

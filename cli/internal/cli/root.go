@@ -58,6 +58,7 @@ func init() {
 	attachCmd.GroupID = "server"
 	detachCmd.GroupID = "server"
 	tagCmd.GroupID = "server"
+	syncPortsCmd.GroupID = "server"
 
 	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(stopCmd)
@@ -69,6 +70,7 @@ func init() {
 	rootCmd.AddCommand(attachCmd)
 	rootCmd.AddCommand(detachCmd)
 	rootCmd.AddCommand(tagCmd)
+	rootCmd.AddCommand(syncPortsCmd)
 
 	// Worktree Management
 	newCmd.GroupID = "worktree"
