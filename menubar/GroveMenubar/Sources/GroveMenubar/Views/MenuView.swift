@@ -160,38 +160,11 @@ struct MenuView: View {
 
     private var mainMenuView: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header with improved loading indicator
-            HStack {
-                Text("Grove")
-                    .font(.headline)
-                    .foregroundColor(.grovePrimary)
-
-                Spacer()
-
-                // Running count badge
-                if serverManager.runningCount > 0 {
-                    Text("\(serverManager.runningCount) running")
-                        .font(.caption2)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.green)
-                        .cornerRadius(8)
-                }
-
-                if serverManager.isLoading || isRefreshing {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
-                        .rotationEffect(.degrees(isRefreshing ? 360 : 0))
-                        .animation(
-                            isRefreshing ? .linear(duration: 1).repeatForever(autoreverses: false) : .default,
-                            value: isRefreshing
-                        )
-                }
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+            MenuHeaderView(
+                runningCount: serverManager.runningCount,
+                isLoading: serverManager.isLoading,
+                isRefreshing: isRefreshing
+            )
 
             if let error = serverManager.errorQueue.first {
                 MenuErrorBanner(
@@ -230,86 +203,21 @@ struct MenuView: View {
 
             Divider()
 
-            // Compact toolbar
-            HStack(spacing: 10) {
-                if serverManager.hasRunningServers {
-                    Button {
-                        serverManager.stopAllServers()
-                    } label: {
-                        HStack(spacing: 3) {
-                            Image(systemName: "stop.fill")
-                                .font(.system(size: 10))
-                            Text("Stop All")
-                                .font(.system(size: 10, weight: .medium))
-                        }
-                        .foregroundColor(.red.opacity(0.8))
-                    }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut("s", modifiers: [.command, .shift])
-
-                    Button {
-                        serverManager.openAllRunningServers()
-                    } label: {
-                        HStack(spacing: 3) {
-                            Image(systemName: "arrow.up.right.square")
-                                .font(.system(size: 10))
-                            Text("Open All")
-                                .font(.system(size: 10, weight: .medium))
-                        }
-                        .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut("o", modifiers: [.command, .shift])
-                }
-
-                Spacer()
-
-                Button {
-                    serverManager.refresh()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-                .keyboardShortcut("r", modifiers: .command)
-                .help("Refresh (⌘R)")
-
-                Button {
+            MenuToolbarView(
+                hasRunningServers: serverManager.hasRunningServers,
+                onStopAll: { serverManager.stopAllServers() },
+                onOpenAll: { serverManager.openAllRunningServers() },
+                onRefresh: { serverManager.refresh() },
+                onOpenLogs: {
                     NSApp.activate(ignoringOtherApps: true)
                     openWindow(id: "log-viewer")
-                } label: {
-                    Image(systemName: "doc.text.magnifyingglass")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-                .keyboardShortcut("l", modifiers: .command)
-                .help("View Logs (⌘L)")
-
-                Button {
-                    serverManager.openTUI()
-                } label: {
-                    Image(systemName: "terminal.fill")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Open TUI")
-
-                Button {
+                },
+                onOpenTUI: { serverManager.openTUI() },
+                onOpenSettings: {
                     NSApp.activate(ignoringOtherApps: true)
                     openSettings()
-                } label: {
-                    Image(systemName: "gear")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
                 }
-                .buttonStyle(.plain)
-                .help("Settings (⌘,)")
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
+            )
 
             // Servers
             if scopedServers.isEmpty {
@@ -686,6 +594,123 @@ struct MenuView: View {
             }
             selectedNavIndex = nil
         }
+    }
+}
+
+struct MenuHeaderView: View {
+    let runningCount: Int
+    let isLoading: Bool
+    let isRefreshing: Bool
+
+    var body: some View {
+        HStack {
+            Text("Grove")
+                .font(.headline)
+                .foregroundColor(.grovePrimary)
+
+            Spacer()
+
+            if runningCount > 0 {
+                Text("\(runningCount) running")
+                    .font(.caption2)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.green)
+                    .cornerRadius(8)
+            }
+
+            if isLoading || isRefreshing {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .rotationEffect(.degrees(isRefreshing ? 360 : 0))
+                    .animation(
+                        isRefreshing ? .linear(duration: 1).repeatForever(autoreverses: false) : .default,
+                        value: isRefreshing
+                    )
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+    }
+}
+
+struct MenuToolbarView: View {
+    let hasRunningServers: Bool
+    let onStopAll: () -> Void
+    let onOpenAll: () -> Void
+    let onRefresh: () -> Void
+    let onOpenLogs: () -> Void
+    let onOpenTUI: () -> Void
+    let onOpenSettings: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if hasRunningServers {
+                Button(action: onStopAll) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 10))
+                        Text("Stop All")
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .foregroundColor(.red.opacity(0.8))
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut("s", modifiers: [.command, .shift])
+
+                Button(action: onOpenAll) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.system(size: 10))
+                        Text("Open All")
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut("o", modifiers: [.command, .shift])
+            }
+
+            Spacer()
+
+            Button(action: onRefresh) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut("r", modifiers: .command)
+            .help("Refresh (⌘R)")
+
+            Button(action: onOpenLogs) {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut("l", modifiers: .command)
+            .help("View Logs (⌘L)")
+
+            Button(action: onOpenTUI) {
+                Image(systemName: "terminal.fill")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Open TUI")
+
+            Button(action: onOpenSettings) {
+                Image(systemName: "gear")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Settings (⌘,)")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
     }
 }
 
