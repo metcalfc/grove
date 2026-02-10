@@ -550,7 +550,7 @@ func (m EnhancedModel) View() string {
 		b.WriteString(m.renderHelp())
 	} else {
 		b.WriteString("\n")
-		b.WriteString(helpStyle.Render("  [s]start [x]stop [r]restart [b]browser [c]copy [l]logs [L]all-logs [a]actions [/]search [?]help [q]quit"))
+		b.WriteString(helpStyle.Render("  [s]start [x]stop [r]restart [b]browser [c]copy [y]sync [l]logs [L]all-logs [a]actions [/]search [?]help [q]quit"))
 	}
 
 	return b.String()
@@ -565,6 +565,7 @@ func (m EnhancedModel) renderHelp() string {
 	b.WriteString("  r             Restart selected server\n")
 	b.WriteString("  b             Open server in browser\n")
 	b.WriteString("  c             Copy URL to clipboard\n")
+	b.WriteString("  y             Sync port with runtime process\n")
 	b.WriteString("  l             View server logs\n")
 	b.WriteString("  L             View all server logs\n")
 	b.WriteString("  p             Start/stop proxy\n")
@@ -709,9 +710,23 @@ func (m *EnhancedModel) syncSelectedServerPorts() tea.Cmd {
 			}
 		}
 
+		outputText := strings.TrimSpace(string(output))
+		syncedMarker := fmt.Sprintf("✓ %s: synced", server.Name)
+		if strings.Contains(outputText, syncedMarker) {
+			return NotificationMsg{
+				Message: fmt.Sprintf("Synced port for %s", server.Name),
+				Type:    NotificationSuccess,
+			}
+		}
+
+		// Command succeeded but no actual update was performed.
+		if outputText == "" {
+			outputText = fmt.Sprintf("No port change for %s", server.Name)
+		}
+
 		return NotificationMsg{
-			Message: fmt.Sprintf("Synced ports for %s", server.Name),
-			Type:    NotificationSuccess,
+			Message: outputText,
+			Type:    NotificationInfo,
 		}
 	}
 }

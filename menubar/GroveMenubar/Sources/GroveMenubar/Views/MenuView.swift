@@ -148,9 +148,25 @@ struct MenuView: View {
         filteredServers.filter { !preferences.isServerPinned($0.name) }
     }
 
+    // Grouped layout for unpinned servers when multiple projects exist.
+    private var groupedUnpinnedServers: [ServerGroup] {
+        guard ServerGrouper.shouldGroup(unpinnedFilteredServers) else {
+            return []
+        }
+        return ServerGrouper.groupServers(unpinnedFilteredServers)
+    }
+
+    // Unpinned servers in the exact visual order used by the list.
+    private var renderedUnpinnedServers: [Server] {
+        if groupedUnpinnedServers.isEmpty {
+            return unpinnedFilteredServers
+        }
+        return groupedUnpinnedServers.flatMap(\.servers)
+    }
+
     // Flat list for keyboard navigation (pinned first, then rest)
     private var navigableServers: [Server] {
-        pinnedFilteredServers + unpinnedFilteredServers
+        pinnedFilteredServers + renderedUnpinnedServers
     }
 
     /// Check for server status changes and play sounds
@@ -324,12 +340,17 @@ struct MenuView: View {
                         let pinOffset = pinned.count
 
                         // Check if servers should be grouped
-                        let shouldGroup = ServerGrouper.shouldGroup(unpinned)
-                        if shouldGroup {
+                        let groups = groupedUnpinnedServers
+                        if !groups.isEmpty {
                             // Show grouped view
-                            let groups = ServerGrouper.groupServers(unpinned)
                             ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
-                                ServerGroupView(group: group, searchText: searchText)
+                                let rowStartIndex = pinOffset + groups.prefix(index).reduce(0) { $0 + $1.servers.count }
+                                ServerGroupView(
+                                    group: group,
+                                    searchText: searchText,
+                                    rowStartIndex: rowStartIndex,
+                                    selectedNavIndex: selectedNavIndex
+                                )
                                     .environment(\.groupIndex, index)
                             }
 
@@ -420,7 +441,7 @@ struct MenuView: View {
             HStack {
                 // Keyboard hint
                 if !serverManager.servers.isEmpty {
-                    Text("j/k navigate · o open · ⌘F search")
+                    Text("j/k navigate · o open · enter run/open · ⌘F search")
                         .font(.system(size: 9))
                         .foregroundColor(.secondary.opacity(0.6))
                 }
@@ -573,7 +594,7 @@ struct MenuView: View {
                    let chars = event.charactersIgnoringModifiers,
                    let num = Int(chars),
                    num >= 1 && num <= 9 {
-                    let servers = filteredServers.filter { $0.isRunning || ($0.displayStatus == "stopped" && $0.hasServer == true) }
+                    let servers = navigableServers.filter { $0.isRunning || ($0.displayStatus == "stopped" && $0.hasServer == true) }
                     if num <= servers.count {
                         let server = servers[num - 1]
                         if !server.isRunning && server.displayStatus == "stopped" && server.hasServer == true {
