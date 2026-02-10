@@ -155,7 +155,7 @@ func runDiscover(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Found %d new repositories.\n", newCount)
 
 	if !register {
-		fmt.Println("\nRun with --register to add them to grove, or --register --start to also start them.")
+		fmt.Println("\nRun 'grove discover --register' to add them, or 'grove discover --register --start' to also start them (use -c <command> if no .grove.yaml).")
 		return nil
 	}
 
@@ -201,10 +201,19 @@ func runDiscover(cmd *cobra.Command, args []string) error {
 
 		fmt.Printf("  ✓ %s (port %d)\n", wt.Name, serverPort)
 
-		if start && cmdToUse != "" {
-			// Start the server
-			fmt.Printf("    Starting with: %s\n", cmdToUse)
-			startCmd := exec.Command("grove", "start", cmdToUse)
+		if start {
+			startArgs := []string{"start"}
+			if cmdToUse != "" {
+				startArgs = append(startArgs, cmdToUse)
+				fmt.Printf("    Starting with: %s\n", cmdToUse)
+			} else if wt.HasConfig {
+				fmt.Printf("    Starting with command from .grove.yaml\n")
+			} else {
+				fmt.Printf("    ! Skipped start for %s: no command resolved (use -c <command> or add command to .grove.yaml)\n", wt.Name)
+				continue
+			}
+
+			startCmd := exec.Command("grove", startArgs...)
 			startCmd.Dir = wt.Path
 			if err := startCmd.Run(); err != nil {
 				fmt.Printf("    ✗ Failed to start: %v\n", err)

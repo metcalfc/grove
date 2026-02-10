@@ -4,6 +4,8 @@ struct ServerGroupView: View {
     @EnvironmentObject var serverManager: ServerManager
     let group: ServerGroup
     var searchText: String = ""
+    var rowStartIndex: Int = 0
+    var selectedNavIndex: Int? = nil
     @State private var isCollapsed: Bool = false
     @State private var showStopAllConfirmation = false
     @State private var showRemoveAllConfirmation = false
@@ -13,8 +15,9 @@ struct ServerGroupView: View {
         VStack(spacing: 0) {
             // Group header
             Button {
-                isCollapsed.toggle()
-                CollapsedGroupsManager.shared.setCollapsed(group.id, collapsed: isCollapsed)
+                let newValue = !isCollapsed
+                isCollapsed = newValue
+                CollapsedGroupsManager.shared.setCollapsed(group.id, collapsed: newValue)
             } label: {
                 HStack {
                     Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
@@ -90,7 +93,7 @@ struct ServerGroupView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This will remove \(group.totalCount) server\(group.totalCount == 1 ? "" : "s") from Grove. Running servers will be stopped first.")
+                Text("This will remove \(group.totalCount) server\(group.totalCount == 1 ? "" : "s") from Grove. Running servers will remain running but no longer be tracked by Grove.")
             }
             .popover(isPresented: $showNewWorktree) {
                 NewWorktreeView()
@@ -100,7 +103,14 @@ struct ServerGroupView: View {
             // Group servers
             if !isCollapsed {
                 ForEach(Array(group.servers.enumerated()), id: \.element.id) { index, server in
-                    ServerRowView(server: server, searchText: searchText, displayIndex: index + 1)
+                    let navIdx = rowStartIndex + index
+                    let displayIndex = navIdx + 1
+                    ServerRowView(
+                        server: server,
+                        searchText: searchText,
+                        displayIndex: displayIndex <= 9 ? displayIndex : nil,
+                        isNavSelected: selectedNavIndex == navIdx
+                    )
                 }
             }
         }

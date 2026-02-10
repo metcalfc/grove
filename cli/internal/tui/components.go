@@ -94,6 +94,7 @@ func NewActionPanel() *ActionPanel {
 			{Key: "s", Description: "start server", Enabled: true},
 			{Key: "x", Description: "stop server", Enabled: true},
 			{Key: "r", Description: "restart server", Enabled: true},
+			{Key: "y", Description: "sync ports", Enabled: true},
 			{Key: "c", Description: "copy URL", Enabled: true},
 			{Key: "b", Description: "open in browser", Enabled: true},
 			{Key: "l", Description: "view logs", Enabled: true},

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -115,4 +116,72 @@ func GetListenerPID(port int) int {
 	}
 
 	return pid
+}
+
+// GetListeningPortsByPID returns all TCP LISTEN ports owned by a PID.
+// Returns an empty slice if no listening ports are found.
+func GetListeningPortsByPID(pid int) []int {
+	cmd := exec.Command("lsof", "-Pan", "-p", strconv.Itoa(pid), "-iTCP", "-sTCP:LISTEN")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	ports := map[int]bool{}
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(lines) <= 1 {
+		return nil
+	}
+
+	// Skip header, parse NAME column for entries like:
+	// TCP 127.0.0.1:3000 (LISTEN)
+	for _, line := range lines[1:] {
+		listenIdx := strings.Index(line, "(LISTEN)")
+		if listenIdx == -1 {
+			continue
+		}
+
+		prefix := strings.TrimSpace(line[:listenIdx])
+		colonIdx := strings.LastIndex(prefix, ":")
+		if colonIdx == -1 || colonIdx+1 >= len(prefix) {
+			continue
+		}
+
+		// Read numeric suffix immediately after colon.
+		var digits strings.Builder
+		for _, ch := range prefix[colonIdx+1:] {
+			if ch < '0' || ch > '9' {
+				break
+			}
+			digits.WriteRune(ch)
+		}
+
+		if digits.Len() == 0 {
+			continue
+		}
+		if p, convErr := strconv.Atoi(digits.String()); convErr == nil && p > 0 && p <= 65535 {
+			ports[p] = true
+		}
+	}
+
+	if len(ports) == 0 {
+		return nil
+	}
+
+	result := make([]int, 0, len(ports))
+	for p := range ports {
+		result = append(result, p)
+	}
+	sort.Ints(result)
+	return result
+}
+
+// GetPrimaryListeningPortByPID returns the smallest listening TCP port for a PID.
+// Returns 0 when no listening ports are found.
+func GetPrimaryListeningPortByPID(pid int) int {
+	ports := GetListeningPortsByPID(pid)
+	if len(ports) == 0 {
+		return 0
+	}
+	return ports[0]
 }

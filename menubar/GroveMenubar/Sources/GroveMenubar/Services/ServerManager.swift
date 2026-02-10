@@ -8,12 +8,13 @@ class ServerManager: ObservableObject {
     @Published var proxy: ProxyInfo?
     @Published var urlMode: String = "port"
     @Published var isLoading = false
-    @Published var error: String?
+    @Published var errorQueue: [String] = []
     @Published var selectedServerForLogs: Server?
     @Published var logLines: [String] = []
     @Published var isStreamingLogs = false
     @Published var serverHealth: [String: HealthStatus] = [:]  // Track health per server
     @Published var serverResources: [String: ServerResources] = [:]  // CPU/memory per server
+    @Published var detectedListeningPorts: [String: Int] = [:]  // Runtime listening ports by server name
 
     enum HealthStatus: String {
         case healthy
@@ -60,12 +61,12 @@ class ServerManager: ObservableObject {
                         self?.grovePath = found
                         // Cache for next launch
                         UserDefaults.standard.set(found, forKey: "cachedGrovePath")
-                        self?.error = nil
+                        self?.clearErrors()
                         self?.refresh()
                     }
                 } else {
                     DispatchQueue.main.async {
-                        self?.error = "Grove CLI not found. Install it or set the path in Settings."
+                        self?.reportError("Grove CLI not found. Install it or set the path in Settings.")
                     }
                 }
             }
@@ -212,6 +213,35 @@ class ServerManager: ObservableObject {
         serverHealth[server.name] ?? .unknown
     }
 
+    func detectedPort(for server: Server) -> Int? {
+        detectedListeningPorts[server.name]
+    }
+
+    func hasPortMismatch(for server: Server) -> Bool {
+        guard server.isRunning,
+              let expectedPort = server.port,
+              let actualPort = detectedListeningPorts[server.name] else {
+            return false
+        }
+        return expectedPort != actualPort
+    }
+
+    // MARK: - Error Reporting
+
+    func reportError(_ message: String) {
+        guard !message.isEmpty else { return }
+        errorQueue.append(message)
+    }
+
+    func dismissCurrentError() {
+        guard !errorQueue.isEmpty else { return }
+        errorQueue.removeFirst()
+    }
+
+    func clearErrors() {
+        errorQueue.removeAll()
+    }
+
     // MARK: - Actions
 
     func refresh() {
@@ -219,7 +249,7 @@ class ServerManager: ObservableObject {
         print("[Grove] refresh() START - thread: \(Thread.isMainThread ? "MAIN" : "bg"), cooldown: \(isWakeCooldown)")
 
         isLoading = true
-        error = nil
+        clearErrors()
 
         print("[Grove] refresh() calling runGrove...")
         runGrove(["ls", "--json", "--fast"]) { [weak self] result in
@@ -233,7 +263,7 @@ class ServerManager: ObservableObject {
                     print("[Grove] refresh() JSON parse FAILED. Output was: \(output.prefix(500))")
                     DispatchQueue.main.async {
                         self?.isLoading = false
-                        self?.error = "Failed to parse server data from Grove CLI"
+                        self?.reportError("Failed to parse server data from Grove CLI")
                     }
                     return
                 }
@@ -261,6 +291,7 @@ class ServerManager: ObservableObject {
                     self.proxy = status.proxy
                     self.urlMode = status.urlMode
                     self.isLoading = false
+                    self.refreshDetectedListeningPorts(for: newServers)
 
                     print("[Grove] refresh() UI updated, cooldown=\(self.isWakeCooldown), calling fetchGitHubInfoForServers...")
                     self.fetchGitHubInfoForServers()
@@ -274,7 +305,7 @@ class ServerManager: ObservableObject {
                 print("[Grove] refresh() FAILED: \(err.localizedDescription)")
                 DispatchQueue.main.async {
                     self?.isLoading = false
-                    self?.error = err.localizedDescription
+                    self?.reportError(err.localizedDescription)
                 }
             }
         }
@@ -302,16 +333,66 @@ class ServerManager: ObservableObject {
         }
     }
 
-    func startServer(_ server: Server) {
+    private func startArgs(portOverride: Int?) -> [String] {
+        if let portOverride {
+            return ["start", "--port", String(portOverride)]
+        }
+        return ["start"]
+    }
+
+    func startServer(_ server: Server, portOverride: Int? = nil) {
         // grove start needs to run from within the worktree directory
-        runGroveInDirectory(server.path, args: ["start"]) { [weak self] result in
+        runGroveInDirectory(server.path, args: startArgs(portOverride: portOverride)) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
                     self?.refresh()
                 case .failure(let error):
-                    self?.error = "Failed to start \(server.name): \(error.localizedDescription)"
+                    self?.reportError("Failed to start \(server.name): \(error.localizedDescription)")
                     self?.refresh()
+                }
+            }
+        }
+    }
+
+    func restartServer(_ server: Server, portOverride: Int? = nil) {
+        if !server.isRunning {
+            startServer(server, portOverride: portOverride)
+            return
+        }
+
+        runGrove(["stop", server.name]) { [weak self] stopResult in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch stopResult {
+                case .success:
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                        self.startServer(server, portOverride: portOverride)
+                    }
+                case .failure(let error):
+                    self.reportError("Failed to stop \(server.name): \(error.localizedDescription)")
+                    self.refresh()
+                }
+            }
+        }
+    }
+
+    /// Re-sync a server's registered port with the process' detected listening port
+    /// without restarting the underlying process.
+    func syncRegistryPortToDetected(_ server: Server) {
+        guard hasPortMismatch(for: server) else {
+            return
+        }
+
+        runGrove(["sync-ports", server.name]) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch result {
+                case .success:
+                    self.refresh()
+                case .failure(let error):
+                    self.reportError("Failed to sync port for \(server.name): \(error.localizedDescription)")
+                    self.refresh()
                 }
             }
         }
@@ -779,9 +860,10 @@ class ServerManager: ObservableObject {
                 }
             }
 
+            let finalUpdates = healthUpdates
             await MainActor.run { [weak self] in
                 self?.isHealthCheckInProgress = false
-                self?.applyHealthUpdates(healthUpdates)
+                self?.applyHealthUpdates(finalUpdates)
             }
         }
     }
@@ -1133,6 +1215,69 @@ class ServerManager: ObservableObject {
                 handleStatusChange(server: server, from: previous, to: currentStatus)
             }
         }
+    }
+
+    private func refreshDetectedListeningPorts(for servers: [Server]) {
+        let runningServers = servers.filter { $0.isRunning && ($0.pid ?? 0) > 0 }
+        let runningNames = Set(runningServers.map { $0.name })
+
+        // Remove stale entries immediately so UI doesn't show old mismatches.
+        detectedListeningPorts = detectedListeningPorts.filter { runningNames.contains($0.key) }
+
+        guard !runningServers.isEmpty else { return }
+
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self else { return }
+            var updates: [String: Int] = [:]
+
+            for server in runningServers {
+                guard let pid = server.pid else { continue }
+                if let port = self.detectListeningPort(pid: pid) {
+                    updates[server.name] = port
+                }
+            }
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                guard !updates.isEmpty else { return }
+
+                var merged = self.detectedListeningPorts
+                for (name, port) in updates {
+                    merged[name] = port
+                }
+                self.detectedListeningPorts = merged
+            }
+        }
+    }
+
+    private func detectListeningPort(pid: Int) -> Int? {
+        let semaphore = DispatchSemaphore(value: 0)
+        var detectedPort: Int?
+
+        Self.runProcessWithTimeout(
+            executablePath: "/usr/sbin/lsof",
+            args: ["-Pan", "-p", String(pid), "-iTCP", "-sTCP:LISTEN"],
+            workingDirectory: nil,
+            timeout: 1.5
+        ) { result in
+            defer { semaphore.signal() }
+            guard case .success(let output) = result else { return }
+
+            for line in output.split(separator: "\n").dropFirst() {
+                guard let listenRange = line.range(of: "(LISTEN)") else { continue }
+                let prefix = line[..<listenRange.lowerBound]
+                guard let colonIndex = prefix.lastIndex(of: ":") else { continue }
+                let afterColon = prefix[prefix.index(after: colonIndex)...]
+                let portDigits = afterColon.prefix { $0.isNumber }
+                if let port = Int(portDigits), (1...65535).contains(port) {
+                    detectedPort = port
+                    return
+                }
+            }
+        }
+
+        _ = semaphore.wait(timeout: .now() + 2.0)
+        return detectedPort
     }
 
     private func handleStatusChange(server: Server, from previousStatus: String, to currentStatus: String) {

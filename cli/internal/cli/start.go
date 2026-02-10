@@ -45,7 +45,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// Detect worktree
 	wt, err := worktree.Detect()
 	if err != nil {
-		return fmt.Errorf("failed to detect worktree: %w", err)
+		return fmt.Errorf("failed to detect worktree: %w\nRun this command from inside a worktree, or use 'grove discover --register' from your repo root", err)
 	}
 
 	// Load project config if exists
@@ -58,7 +58,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	} else if projConfig != nil && projConfig.Command != "" {
 		command = []string{projConfig.Command}
 	} else {
-		return fmt.Errorf("no command specified and no .grove.yaml found\nUsage: grove start <command>")
+		return fmt.Errorf("no command specified and no .grove.yaml found. Run 'grove start <command>' from this directory, or add a 'command' key to .grove.yaml")
 	}
 
 	// Load registry
@@ -69,7 +69,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	// Check if already running
 	if existing, ok := reg.Get(wt.Name); ok && existing.IsRunning() {
-		return fmt.Errorf("server '%s' is already running at %s (port %d)\nUse 'grove stop' to stop it first, or 'grove restart' to restart",
+		return fmt.Errorf("server '%s' is already running at %s (port %d)\nRun 'grove stop' or 'grove restart' from this directory",
 			wt.Name, existing.URL, existing.Port)
 	}
 
@@ -94,7 +94,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	// Check if port is available
 	if !port.IsAvailable(serverPort) {
-		return fmt.Errorf("port %d is already in use", serverPort)
+		return fmt.Errorf("port %d is already in use. Use 'grove start -p <port>' to override, or stop the process using it", serverPort)
 	}
 
 	// Build URL based on configured mode

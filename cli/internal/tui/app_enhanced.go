@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
 	"syscall"
@@ -32,6 +33,7 @@ type EnhancedKeyMap struct {
 	Logs          key.Binding
 	AllLogs       key.Binding
 	Refresh       key.Binding
+	SyncPorts     key.Binding
 	Up            key.Binding
 	Down          key.Binding
 	StartProxy    key.Binding
@@ -78,6 +80,10 @@ var enhancedKeys = EnhancedKeyMap{
 	Refresh: key.NewBinding(
 		key.WithKeys("F5"),
 		key.WithHelp("F5", "refresh"),
+	),
+	SyncPorts: key.NewBinding(
+		key.WithKeys("y"),
+		key.WithHelp("y", "sync ports"),
 	),
 	Up: key.NewBinding(
 		key.WithKeys("up", "k"),
@@ -453,6 +459,9 @@ func (m EnhancedModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
+		case key.Matches(msg, enhancedKeys.SyncPorts):
+			return m, m.syncSelectedServerPorts()
+
 		case key.Matches(msg, enhancedKeys.StartProxy):
 			return m, m.toggleProxy()
 
@@ -541,7 +550,7 @@ func (m EnhancedModel) View() string {
 		b.WriteString(m.renderHelp())
 	} else {
 		b.WriteString("\n")
-		b.WriteString(helpStyle.Render("  [s]start [x]stop [r]restart [b]browser [c]copy [l]logs [L]all-logs [a]actions [/]search [?]help [q]quit"))
+		b.WriteString(helpStyle.Render("  [s]start [x]stop [r]restart [b]browser [c]copy [y]sync [l]logs [L]all-logs [a]actions [/]search [?]help [q]quit"))
 	}
 
 	return b.String()
@@ -556,6 +565,7 @@ func (m EnhancedModel) renderHelp() string {
 	b.WriteString("  r             Restart selected server\n")
 	b.WriteString("  b             Open server in browser\n")
 	b.WriteString("  c             Copy URL to clipboard\n")
+	b.WriteString("  y             Sync port with runtime process\n")
 	b.WriteString("  l             View server logs\n")
 	b.WriteString("  L             View all server logs\n")
 	b.WriteString("  p             Start/stop proxy\n")
@@ -588,11 +598,11 @@ func (m *EnhancedModel) startServer() tea.Cmd {
 	m.starting[server.Name] = true
 
 	return func() tea.Msg {
-		// In a real implementation, you would start the server here
-		// For now, we just show a message
+		// Start from TUI is not wired yet because `grove start` is worktree-scoped.
+		// Give explicit, correct guidance for the selected worktree path.
 		delete(m.starting, server.Name)
 		return NotificationMsg{
-			Message: fmt.Sprintf("Use 'grove start %s' in terminal to start server", server.Name),
+			Message: fmt.Sprintf("To start %s: cd %s && grove start", server.Name, server.Path),
 			Type:    NotificationInfo,
 		}
 	}
@@ -654,12 +664,68 @@ func (m *EnhancedModel) restartServer() tea.Cmd {
 	}
 
 	return func() tea.Msg {
-		// Stop server first
-		if process, err := os.FindProcess(server.PID); err == nil {
-			process.Signal(syscall.SIGTERM) //nolint:errcheck // Best effort signal
-		}
+		// Restart from TUI is not wired yet. Don't send signals here; provide the
+		// canonical restart command that works from any directory.
 		return NotificationMsg{
-			Message: fmt.Sprintf("Restart %s with 'grove start %s'", server.Name, server.Name),
+			Message: fmt.Sprintf("Restart %s with: grove restart %s", server.Name, server.Name),
+			Type:    NotificationInfo,
+		}
+	}
+}
+
+func (m *EnhancedModel) syncSelectedServerPorts() tea.Cmd {
+	if m.list.SelectedItem() == nil {
+		return nil
+	}
+
+	item := m.list.SelectedItem().(EnhancedServerItem)
+	server := item.server
+
+	return func() tea.Msg {
+		exe, err := os.Executable()
+		if err != nil {
+			return NotificationMsg{
+				Message: fmt.Sprintf("Failed to locate grove executable: %v", err),
+				Type:    NotificationError,
+			}
+		}
+
+		cmd := exec.Command(exe, "sync-ports", server.Name)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			msg := strings.TrimSpace(string(output))
+			if msg == "" {
+				msg = err.Error()
+			}
+			return NotificationMsg{
+				Message: fmt.Sprintf("Port sync failed for %s: %s", server.Name, msg),
+				Type:    NotificationError,
+			}
+		}
+
+		if reg, loadErr := registry.Load(); loadErr == nil {
+			m.reg = reg
+			if m.list.FilterState() == list.Unfiltered {
+				m.list.SetItems(makeEnhancedItems(m.reg))
+			}
+		}
+
+		outputText := strings.TrimSpace(string(output))
+		syncedMarker := fmt.Sprintf("✓ %s: synced", server.Name)
+		if strings.Contains(outputText, syncedMarker) {
+			return NotificationMsg{
+				Message: fmt.Sprintf("Synced port for %s", server.Name),
+				Type:    NotificationSuccess,
+			}
+		}
+
+		// Command succeeded but no actual update was performed.
+		if outputText == "" {
+			outputText = fmt.Sprintf("No port change for %s", server.Name)
+		}
+
+		return NotificationMsg{
+			Message: outputText,
 			Type:    NotificationInfo,
 		}
 	}
