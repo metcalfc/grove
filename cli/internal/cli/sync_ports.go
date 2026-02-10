@@ -9,6 +9,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	loadRegistry          = registry.Load
+	getListeningPortByPID = port.GetPrimaryListeningPortByPID
+	setServerInRegistry   = func(reg *registry.Registry, server *registry.Server) error {
+		return reg.Set(server)
+	}
+)
+
 var syncPortsCmd = &cobra.Command{
 	Use:   "sync-ports [name]",
 	Short: "Sync registered ports with runtime listening ports",
@@ -31,7 +39,7 @@ func init() {
 func runSyncPorts(cmd *cobra.Command, args []string) error {
 	syncAll, _ := cmd.Flags().GetBool("all")
 
-	reg, err := registry.Load()
+	reg, err := loadRegistry()
 	if err != nil {
 		return fmt.Errorf("failed to load registry: %w", err)
 	}
@@ -75,7 +83,7 @@ func runSyncPorts(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		actualPort := port.GetPrimaryListeningPortByPID(s.PID)
+		actualPort := getListeningPortByPID(s.PID)
 		if actualPort == 0 {
 			skipped++
 			fmt.Printf("~ %s: skipped (no LISTEN port detected for PID %d)\n", s.Name, s.PID)
@@ -105,7 +113,7 @@ func runSyncPorts(cmd *cobra.Command, args []string) error {
 		oldPort := s.Port
 		s.Port = actualPort
 		s.URL = cfg.ServerURL(s.Name, actualPort)
-		if setErr := reg.Set(s); setErr != nil {
+		if setErr := setServerInRegistry(reg, s); setErr != nil {
 			skipped++
 			fmt.Printf("! %s: failed to update from :%d to :%d (%v)\n", s.Name, oldPort, actualPort, setErr)
 			continue
