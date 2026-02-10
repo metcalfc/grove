@@ -73,8 +73,6 @@ struct MenuView: View {
     @ObservedObject private var preferences = PreferencesManager.shared
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
-    @State private var selectedServerIndex: Int?
-    @FocusState private var isFocused: Bool
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
     @State private var showCopiedToast = false
