@@ -795,9 +795,10 @@ class ServerManager: ObservableObject {
                 }
             }
 
+            let finalUpdates = healthUpdates
             await MainActor.run { [weak self] in
                 self?.isHealthCheckInProgress = false
-                self?.applyHealthUpdates(healthUpdates)
+                self?.applyHealthUpdates(finalUpdates)
             }
         }
     }
