@@ -209,6 +209,8 @@ func runDiscover(cmd *cobra.Command, args []string) error {
 			if err := startCmd.Run(); err != nil {
 				fmt.Printf("    ✗ Failed to start: %v\n", err)
 			}
+		} else if start {
+			fmt.Printf("    ! Skipped start for %s: no command resolved (use -c <command> or run 'cd %s && grove start')\n", wt.Name, wt.Path)
 		}
 	}
 

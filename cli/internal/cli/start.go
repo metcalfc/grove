@@ -45,7 +45,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// Detect worktree
 	wt, err := worktree.Detect()
 	if err != nil {
-		return fmt.Errorf("failed to detect worktree: %w", err)
+		return fmt.Errorf("failed to detect worktree: %w\nRun this command from inside a worktree, or use 'grove discover --register' from your repo root", err)
 	}
 
 	// Load project config if exists
