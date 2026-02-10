@@ -318,9 +318,16 @@ class ServerManager: ObservableObject {
         }
     }
 
-    func startServer(_ server: Server) {
+    private func startArgs(portOverride: Int?) -> [String] {
+        if let portOverride {
+            return ["start", "--port", String(portOverride)]
+        }
+        return ["start"]
+    }
+
+    func startServer(_ server: Server, portOverride: Int? = nil) {
         // grove start needs to run from within the worktree directory
-        runGroveInDirectory(server.path, args: ["start"]) { [weak self] result in
+        runGroveInDirectory(server.path, args: startArgs(portOverride: portOverride)) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
@@ -328,6 +335,28 @@ class ServerManager: ObservableObject {
                 case .failure(let error):
                     self?.reportError("Failed to start \(server.name): \(error.localizedDescription)")
                     self?.refresh()
+                }
+            }
+        }
+    }
+
+    func restartServer(_ server: Server, portOverride: Int? = nil) {
+        if !server.isRunning {
+            startServer(server, portOverride: portOverride)
+            return
+        }
+
+        runGrove(["stop", server.name]) { [weak self] stopResult in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch stopResult {
+                case .success:
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                        self.startServer(server, portOverride: portOverride)
+                    }
+                case .failure(let error):
+                    self.reportError("Failed to stop \(server.name): \(error.localizedDescription)")
+                    self.refresh()
                 }
             }
         }

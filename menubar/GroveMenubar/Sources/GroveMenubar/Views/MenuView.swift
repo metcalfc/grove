@@ -860,6 +860,8 @@ struct ServerRowView: View {
     var isNavSelected: Bool = false
     @State private var isExpanded = false
     @State private var isHovered = false
+    @State private var showPortOverrideSheet = false
+    @State private var portOverrideInput = ""
     @Environment(\.showCopiedToast) private var showCopiedToast
 
     private func ciStatusHelp(_ status: GitHubInfo.CIStatus) -> String {
@@ -901,6 +903,18 @@ struct ServerRowView: View {
         default:
             return "circle"
         }
+    }
+
+    private var parsedPortOverride: Int? {
+        guard let port = Int(portOverrideInput), (1...65535).contains(port) else {
+            return nil
+        }
+        return port
+    }
+
+    private func openPortOverrideSheet() {
+        portOverrideInput = server.port.map(String.init) ?? ""
+        showPortOverrideSheet = true
     }
 
     var body: some View {
@@ -1116,6 +1130,14 @@ struct ServerRowView: View {
 
                         Divider()
 
+                        Button {
+                            openPortOverrideSheet()
+                        } label: {
+                            Label(server.isRunning ? "Restart on Port..." : "Start on Port...", systemImage: "number")
+                        }
+
+                        Divider()
+
                         if server.isRunning {
                             Button {
                                 serverManager.copyURL(server)
@@ -1288,6 +1310,14 @@ struct ServerRowView: View {
 
             Divider()
 
+            Button {
+                openPortOverrideSheet()
+            } label: {
+                Label(server.isRunning ? "Restart on Port..." : "Start on Port...", systemImage: "number")
+            }
+
+            Divider()
+
             if server.isRunning {
                 Button {
                     serverManager.openServer(server)
@@ -1347,6 +1377,46 @@ struct ServerRowView: View {
                     Label("Stop Server", systemImage: "stop.fill")
                 }
             }
+        }
+        .sheet(isPresented: $showPortOverrideSheet) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(server.isRunning ? "Restart on Port" : "Start on Port")
+                    .font(.headline)
+
+                Text(server.displayName)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                TextField("Port (1-65535)", text: $portOverrideInput)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.body, design: .monospaced))
+
+                if parsedPortOverride == nil && !portOverrideInput.isEmpty {
+                    Text("Enter a valid port between 1 and 65535.")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+
+                HStack {
+                    Spacer()
+                    Button("Cancel") {
+                        showPortOverrideSheet = false
+                    }
+                    Button(server.isRunning ? "Restart" : "Start") {
+                        guard let port = parsedPortOverride else { return }
+                        showPortOverrideSheet = false
+                        if server.isRunning {
+                            serverManager.restartServer(server, portOverride: port)
+                        } else {
+                            serverManager.startServer(server, portOverride: port)
+                        }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(parsedPortOverride == nil)
+                }
+            }
+            .padding(16)
+            .frame(width: 340)
         }
     }
 }
