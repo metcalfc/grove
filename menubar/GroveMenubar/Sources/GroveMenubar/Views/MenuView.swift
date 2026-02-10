@@ -108,12 +108,30 @@ struct MenuView: View {
         }
     }
 
+    // Keep active worktrees easy to find even when not grouped.
+    private var orderedScopedServers: [Server] {
+        scopedServers.sorted { lhs, rhs in
+            if lhs.isRunning != rhs.isRunning {
+                return lhs.isRunning
+            }
+            let lhsActive = lhs.hasClaude == true || lhs.hasVSCode == true || lhs.gitDirty == true
+            let rhsActive = rhs.hasClaude == true || rhs.hasVSCode == true || rhs.gitDirty == true
+            if lhsActive != rhsActive {
+                return lhsActive
+            }
+            if (lhs.hasServer == true) != (rhs.hasServer == true) {
+                return lhs.hasServer == true
+            }
+            return lhs.name < rhs.name
+        }
+    }
+
     // Filter visible workspaces based on search text.
     private var filteredServers: [Server] {
         if searchText.isEmpty {
-            return scopedServers
+            return orderedScopedServers
         }
-        return scopedServers.filter { server in
+        return orderedScopedServers.filter { server in
             server.name.localizedCaseInsensitiveContains(searchText) ||
             server.path.localizedCaseInsensitiveContains(searchText) ||
             (server.githubInfo?.prNumber.map { "#\($0)".contains(searchText) } ?? false)
