@@ -179,7 +179,15 @@ struct MenuView: View {
             MenuHeaderView(
                 runningCount: serverManager.runningCount,
                 isLoading: serverManager.isLoading,
-                isRefreshing: isRefreshing
+                isRefreshing: isRefreshing,
+                onRefresh: { serverManager.refresh() },
+                onOpenSettings: {
+                    NSApp.activate(ignoringOtherApps: true)
+                    openSettings()
+                },
+                onQuit: {
+                    NSApplication.shared.terminate(nil)
+                }
             )
 
             if let error = serverManager.errorQueue.first {
@@ -594,6 +602,9 @@ struct MenuHeaderView: View {
     let runningCount: Int
     let isLoading: Bool
     let isRefreshing: Bool
+    let onRefresh: () -> Void
+    let onOpenSettings: () -> Void
+    let onQuit: () -> Void
 
     var body: some View {
         HStack {
@@ -626,6 +637,18 @@ struct MenuHeaderView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
+        .contextMenu {
+            Button(action: onRefresh) {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            Button(action: onOpenSettings) {
+                Label("Settings", systemImage: "gear")
+            }
+            Divider()
+            Button(role: .destructive, action: onQuit) {
+                Label("Quit Grove", systemImage: "power")
+            }
+        }
     }
 }
 
@@ -955,6 +978,14 @@ struct ServerRowView: View {
                                 Text(":\(String(port))")
                                     .font(.system(.caption, design: .monospaced))
                                     .foregroundColor(.grovePrimary)
+
+                                if serverManager.hasPortMismatch(for: server),
+                                   let actualPort = serverManager.detectedPort(for: server) {
+                                    Text("→:\(actualPort)")
+                                        .font(.system(.caption2, design: .monospaced))
+                                        .foregroundColor(.orange)
+                                        .help("Process listens on :\(actualPort), registry is :\(port)")
+                                }
                             }
                         }
 
