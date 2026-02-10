@@ -35,9 +35,35 @@ class ServerGrouper {
                 id: key,
                 name: extractGroupName(from: key),
                 path: key,
-                servers: servers.sorted { $0.name < $1.name }
+                servers: sortServers(servers)
             )
-        }.sorted { $0.name < $1.name }
+        }.sorted { lhs, rhs in
+            // Put groups with running servers first.
+            if lhs.isRunning != rhs.isRunning {
+                return lhs.isRunning
+            }
+            // Then prioritize groups with more active servers.
+            if lhs.runningCount != rhs.runningCount {
+                return lhs.runningCount > rhs.runningCount
+            }
+            return lhs.name < rhs.name
+        }
+    }
+
+    private static func sortServers(_ servers: [Server]) -> [Server] {
+        servers.sorted { lhs, rhs in
+            // Running servers should be easy to find first.
+            if lhs.isRunning != rhs.isRunning {
+                return lhs.isRunning
+            }
+            // Then show active worktrees ahead of inactive ones.
+            let lhsActive = lhs.hasClaude == true || lhs.hasVSCode == true || lhs.gitDirty == true
+            let rhsActive = rhs.hasClaude == true || rhs.hasVSCode == true || rhs.gitDirty == true
+            if lhsActive != rhsActive {
+                return lhsActive
+            }
+            return lhs.name < rhs.name
+        }
     }
 
     private static func extractGroupKey(from server: Server) -> String {
