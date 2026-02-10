@@ -81,7 +81,6 @@ struct MenuView: View {
     @State private var eventMonitor: Any?
     @State private var currentToast: ToastType?
     @State private var toastDismissTask: Task<Void, Never>?
-    @State private var errorMessages: [String] = []
     @State private var isRefreshing = false
     @State private var isStoppedCollapsed = false
     // Keyboard navigation
@@ -93,12 +92,30 @@ struct MenuView: View {
         mainMenuView
     }
 
-    // Filter servers based on search text
-    private var filteredServers: [Server] {
-        if searchText.isEmpty {
+    // Apply menubar scope before search/filtering.
+    private var scopedServers: [Server] {
+        switch preferences.menubarScope {
+        case .serversOnly:
+            return serverManager.servers.filter { $0.hasServer != false }
+        case .activeWorktrees:
+            return serverManager.servers.filter { server in
+                server.hasServer == true ||
+                server.isRunning ||
+                server.hasClaude == true ||
+                server.hasVSCode == true ||
+                server.gitDirty == true
+            }
+        case .allWorktrees:
             return serverManager.servers
         }
-        return serverManager.servers.filter { server in
+    }
+
+    // Filter visible workspaces based on search text.
+    private var filteredServers: [Server] {
+        if searchText.isEmpty {
+            return scopedServers
+        }
+        return scopedServers.filter { server in
             server.name.localizedCaseInsensitiveContains(searchText) ||
             server.path.localizedCaseInsensitiveContains(searchText) ||
             (server.githubInfo?.prNumber.map { "#\($0)".contains(searchText) } ?? false)
@@ -137,16 +154,8 @@ struct MenuView: View {
         }
     }
 
-    /// Dismiss the current error and show the next one in the queue, if any
     private func dismissCurrentError() {
-        if !errorMessages.isEmpty {
-            errorMessages.removeFirst()
-        }
-        if let next = errorMessages.first {
-            serverManager.error = next
-        } else {
-            serverManager.error = nil
-        }
+        serverManager.dismissCurrentError()
     }
 
     private var mainMenuView: some View {
@@ -184,37 +193,12 @@ struct MenuView: View {
             .padding(.horizontal)
             .padding(.vertical, 8)
 
-            // Error banner (shows most recent, with count if multiple)
-            if let error = serverManager.error {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.yellow)
-                    Text(error)
-                        .font(.caption)
-                        .lineLimit(2)
-
-                    if errorMessages.count > 1 {
-                        Text("+\(errorMessages.count - 1)")
-                            .font(.caption2)
-                            .foregroundColor(.yellow)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(Color.yellow.opacity(0.2))
-                            .cornerRadius(3)
-                    }
-
-                    Spacer()
-                    Button {
-                        dismissCurrentError()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color.yellow.opacity(0.15))
+            if let error = serverManager.errorQueue.first {
+                MenuErrorBanner(
+                    error: error,
+                    additionalErrorCount: max(0, serverManager.errorQueue.count - 1),
+                    onDismiss: dismissCurrentError
+                )
             }
 
             Divider()
@@ -225,7 +209,7 @@ struct MenuView: View {
                     .foregroundColor(.secondary)
                     .font(.system(size: 11))
 
-                TextField("Search servers...", text: $searchText)
+                TextField("Search worktrees...", text: $searchText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
                     .focused($isSearchFocused)
@@ -328,14 +312,14 @@ struct MenuView: View {
             .padding(.vertical, 4)
 
             // Servers
-            if serverManager.servers.isEmpty {
+            if scopedServers.isEmpty {
                 // Enhanced empty state with onboarding
                 VStack(spacing: 12) {
                     Image(systemName: "tree.fill")
                         .font(.system(size: 36))
                         .foregroundColor(.grovePrimary.opacity(0.6))
 
-                    Text("No servers found")
+                    Text("No worktrees found")
                         .font(.headline)
                         .foregroundColor(.primary)
 
@@ -591,12 +575,6 @@ struct MenuView: View {
                 }
             }
         }
-        .onChange(of: serverManager.error) {
-            // Track errors in the queue
-            if let error = serverManager.error, !error.isEmpty {
-                errorMessages.append(error)
-            }
-        }
         .onChange(of: serverManager.runningCount) {
             checkSoundEffects()
         }
@@ -708,6 +686,42 @@ struct MenuView: View {
             }
             selectedNavIndex = nil
         }
+    }
+}
+
+struct MenuErrorBanner: View {
+    let error: String
+    let additionalErrorCount: Int
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.yellow)
+            Text(error)
+                .font(.caption)
+                .lineLimit(2)
+
+            if additionalErrorCount > 0 {
+                Text("+\(additionalErrorCount)")
+                    .font(.caption2)
+                    .foregroundColor(.yellow)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(Color.yellow.opacity(0.2))
+                    .cornerRadius(3)
+            }
+
+            Spacer()
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.caption)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.yellow.opacity(0.15))
     }
 }
 

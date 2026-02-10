@@ -302,10 +302,17 @@ grove ui
 **Keyboard shortcuts:**
 | Key | Action |
 |-----|--------|
-| `enter` / `space` | Start/stop selected server |
-| `o` | Open in browser |
+| `j` / `k` or `↑` / `↓` | Navigate servers |
+| `s` | Start selected server (shows command guidance) |
+| `x` | Stop selected server |
+| `r` | Restart selected server (shows command guidance) |
+| `b` | Open in browser |
+| `c` | Copy server URL |
 | `l` | View logs |
+| `L` | View all logs (split/multi view) |
 | `p` | Toggle proxy |
+| `a` | Toggle action panel |
+| `F5` | Refresh list |
 | `/` | Filter servers |
 | `?` | Help |
 | `q` | Quit |

@@ -8,7 +8,7 @@ class ServerManager: ObservableObject {
     @Published var proxy: ProxyInfo?
     @Published var urlMode: String = "port"
     @Published var isLoading = false
-    @Published var error: String?
+    @Published var errorQueue: [String] = []
     @Published var selectedServerForLogs: Server?
     @Published var logLines: [String] = []
     @Published var isStreamingLogs = false
@@ -60,12 +60,12 @@ class ServerManager: ObservableObject {
                         self?.grovePath = found
                         // Cache for next launch
                         UserDefaults.standard.set(found, forKey: "cachedGrovePath")
-                        self?.error = nil
+                        self?.clearErrors()
                         self?.refresh()
                     }
                 } else {
                     DispatchQueue.main.async {
-                        self?.error = "Grove CLI not found. Install it or set the path in Settings."
+                        self?.reportError("Grove CLI not found. Install it or set the path in Settings.")
                     }
                 }
             }
@@ -212,6 +212,22 @@ class ServerManager: ObservableObject {
         serverHealth[server.name] ?? .unknown
     }
 
+    // MARK: - Error Reporting
+
+    func reportError(_ message: String) {
+        guard !message.isEmpty else { return }
+        errorQueue.append(message)
+    }
+
+    func dismissCurrentError() {
+        guard !errorQueue.isEmpty else { return }
+        errorQueue.removeFirst()
+    }
+
+    func clearErrors() {
+        errorQueue.removeAll()
+    }
+
     // MARK: - Actions
 
     func refresh() {
@@ -219,7 +235,7 @@ class ServerManager: ObservableObject {
         print("[Grove] refresh() START - thread: \(Thread.isMainThread ? "MAIN" : "bg"), cooldown: \(isWakeCooldown)")
 
         isLoading = true
-        error = nil
+        clearErrors()
 
         print("[Grove] refresh() calling runGrove...")
         runGrove(["ls", "--json", "--fast"]) { [weak self] result in
@@ -233,7 +249,7 @@ class ServerManager: ObservableObject {
                     print("[Grove] refresh() JSON parse FAILED. Output was: \(output.prefix(500))")
                     DispatchQueue.main.async {
                         self?.isLoading = false
-                        self?.error = "Failed to parse server data from Grove CLI"
+                        self?.reportError("Failed to parse server data from Grove CLI")
                     }
                     return
                 }
@@ -274,7 +290,7 @@ class ServerManager: ObservableObject {
                 print("[Grove] refresh() FAILED: \(err.localizedDescription)")
                 DispatchQueue.main.async {
                     self?.isLoading = false
-                    self?.error = err.localizedDescription
+                    self?.reportError(err.localizedDescription)
                 }
             }
         }
@@ -310,7 +326,7 @@ class ServerManager: ObservableObject {
                 case .success:
                     self?.refresh()
                 case .failure(let error):
-                    self?.error = "Failed to start \(server.name): \(error.localizedDescription)"
+                    self?.reportError("Failed to start \(server.name): \(error.localizedDescription)")
                     self?.refresh()
                 }
             }

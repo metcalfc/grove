@@ -63,11 +63,11 @@ func runStop(cmd *cobra.Command, args []string) error {
 func stopServer(reg *registry.Registry, name string, timeout time.Duration) error {
 	server, ok := reg.Get(name)
 	if !ok {
-		return fmt.Errorf("no server registered for '%s'", name)
+		return fmt.Errorf("no server registered for '%s'. Run 'grove discover --register' from the repo, or 'cd <path> && grove start' from the worktree", name)
 	}
 
 	if !server.IsRunning() {
-		return fmt.Errorf("server '%s' is not running", name)
+		return fmt.Errorf("server '%s' is not running. Nothing to stop. Run 'cd %s && grove start' to start it", name, server.Path)
 	}
 
 	fmt.Printf("Stopping server '%s' (PID: %d)...\n", name, server.PID)
@@ -198,11 +198,11 @@ func stopAllServers(reg *registry.Registry, timeout time.Duration) error {
 func stopServerNoReload(reg *registry.Registry, name string, timeout time.Duration) error {
 	server, ok := reg.Get(name)
 	if !ok {
-		return fmt.Errorf("no server registered for '%s'", name)
+		return fmt.Errorf("no server registered for '%s'. Run 'grove discover --register' from the repo, or 'cd <path> && grove start' from the worktree", name)
 	}
 
 	if !server.IsRunning() {
-		return fmt.Errorf("server '%s' is not running", name)
+		return fmt.Errorf("server '%s' is not running. Nothing to stop. Run 'cd %s && grove start' to start it", name, server.Path)
 	}
 
 	fmt.Printf("Stopping server '%s' (PID: %d)...\n", name, server.PID)

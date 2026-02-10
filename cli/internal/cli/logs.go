@@ -68,16 +68,16 @@ func runLogs(cmd *cobra.Command, args []string) error {
 
 	server, ok := reg.Get(name)
 	if !ok {
-		return fmt.Errorf("no server registered for '%s'", name)
+		return fmt.Errorf("no server registered for '%s'. Run 'grove discover --register' from the repo, or start with 'cd <path> && grove start' from the worktree", name)
 	}
 
 	if server.LogFile == "" {
-		return fmt.Errorf("no log file configured for '%s'", name)
+		return fmt.Errorf("no log file configured for '%s'. Add 'log_file' to .grove.yaml or run 'cd %s && grove start' to start (creates log automatically)", name, server.Path)
 	}
 
 	// Check if log file exists
 	if _, err := os.Stat(server.LogFile); os.IsNotExist(err) {
-		return fmt.Errorf("log file does not exist: %s", server.LogFile)
+		return fmt.Errorf("log file does not exist: %s. Run 'cd %s && grove start' to start the server and create the log file", server.LogFile, server.Path)
 	}
 
 	if follow {

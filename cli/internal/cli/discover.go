@@ -155,7 +155,7 @@ func runDiscover(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Found %d new repositories.\n", newCount)
 
 	if !register {
-		fmt.Println("\nRun with --register to add them to grove, or --register --start to also start them.")
+		fmt.Println("\nRun 'grove discover --register' to add them, or 'grove discover --register --start' to also start them (use -c <command> if no .grove.yaml).")
 		return nil
 	}
 

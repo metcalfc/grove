@@ -52,11 +52,11 @@ func runRestart(cmd *cobra.Command, args []string) error {
 	// Get server info
 	server, ok := reg.Get(name)
 	if !ok {
-		return fmt.Errorf("no server registered for '%s'\nUse 'grove start <command>' to start a new server", name)
+		return fmt.Errorf("no server registered for '%s'. Run 'grove discover --register' from the repo to register worktrees, or 'cd <path> && grove start' from the worktree to start and register", name)
 	}
 
 	if !server.IsRunning() {
-		return fmt.Errorf("server '%s' is not running\nUse 'grove start' to start it", name)
+		return fmt.Errorf("server '%s' is not running. Run 'cd %s && grove start' to start it", name, server.Path)
 	}
 
 	// Remember the command and path for restart

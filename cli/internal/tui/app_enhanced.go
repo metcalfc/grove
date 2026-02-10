@@ -588,11 +588,11 @@ func (m *EnhancedModel) startServer() tea.Cmd {
 	m.starting[server.Name] = true
 
 	return func() tea.Msg {
-		// In a real implementation, you would start the server here
-		// For now, we just show a message
+		// Start from TUI is not wired yet because `grove start` is worktree-scoped.
+		// Give explicit, correct guidance for the selected worktree path.
 		delete(m.starting, server.Name)
 		return NotificationMsg{
-			Message: fmt.Sprintf("Use 'grove start %s' in terminal to start server", server.Name),
+			Message: fmt.Sprintf("To start %s: cd %s && grove start", server.Name, server.Path),
 			Type:    NotificationInfo,
 		}
 	}
@@ -654,12 +654,10 @@ func (m *EnhancedModel) restartServer() tea.Cmd {
 	}
 
 	return func() tea.Msg {
-		// Stop server first
-		if process, err := os.FindProcess(server.PID); err == nil {
-			process.Signal(syscall.SIGTERM) //nolint:errcheck // Best effort signal
-		}
+		// Restart from TUI is not wired yet. Don't send signals here; provide the
+		// canonical restart command that works from any directory.
 		return NotificationMsg{
-			Message: fmt.Sprintf("Restart %s with 'grove start %s'", server.Name, server.Name),
+			Message: fmt.Sprintf("Restart %s with: grove restart %s", server.Name, server.Name),
 			Type:    NotificationInfo,
 		}
 	}
