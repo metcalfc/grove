@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -159,6 +160,49 @@ fi
 exit 0
 `
 
+const groveWorktreeCreateHook = `#!/bin/bash
+# Grove WorktreeCreate hook - auto-registers Claude worktrees with grove.
+INPUT=$(cat)
+WORKTREE_PATH=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+
+if [ -z "$WORKTREE_PATH" ]; then
+  exit 0
+fi
+
+if ! echo "$WORKTREE_PATH" | grep -q '/.claude/worktrees/'; then
+  exit 0
+fi
+
+grove discover --register "$WORKTREE_PATH" >/dev/null 2>&1 || true
+exit 0
+`
+
+const groveWorktreeRemoveHook = `#!/bin/bash
+# Grove WorktreeRemove hook - deregisters Claude worktrees from grove.
+INPUT=$(cat)
+WORKTREE_PATH=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+
+if [ -z "$WORKTREE_PATH" ]; then
+  exit 0
+fi
+
+if ! echo "$WORKTREE_PATH" | grep -q '/.claude/worktrees/'; then
+  exit 0
+fi
+
+NAME=$(grove ls --json 2>/dev/null \
+  | jq -r --arg path "$WORKTREE_PATH" '.[] | select(.path == $path) | .name' 2>/dev/null \
+  | head -1)
+
+if [ -z "$NAME" ]; then
+  exit 0
+fi
+
+grove stop "$NAME" >/dev/null 2>&1 || true
+grove detach "$NAME" >/dev/null 2>&1 || true
+exit 0
+`
+
 const groveDocReminderHook = `#!/bin/bash
 # Grove Stop hook - reminds about documentation and task status updates
 set -e
@@ -243,10 +287,12 @@ func runHooksInstall(cmd *cobra.Command, args []string) error {
 
 	// Write hook scripts
 	hookScripts := map[string]string{
-		"grove-session-start.sh": groveSessionStartHook,
-		"grove-dev-server.sh":    groveDevServerHook,
-		"grove-worktree.sh":      groveWorktreeHook,
-		"grove-doc-reminder.sh":  groveDocReminderHook,
+		"grove-session-start.sh":   groveSessionStartHook,
+		"grove-dev-server.sh":      groveDevServerHook,
+		"grove-worktree.sh":        groveWorktreeHook,
+		"grove-doc-reminder.sh":    groveDocReminderHook,
+		"grove-worktree-create.sh": groveWorktreeCreateHook,
+		"grove-worktree-remove.sh": groveWorktreeRemoveHook,
 	}
 
 	for name, content := range hookScripts {
@@ -322,6 +368,34 @@ func runHooksInstall(cmd *cobra.Command, args []string) error {
 		hooks["Stop"] = stopHooks
 	}
 
+	// WorktreeCreate hook — auto-register Claude worktrees
+	worktreeCreateHooks := getOrCreateHookArray(hooks, "WorktreeCreate")
+	if !hasGroveHook(worktreeCreateHooks, "grove-worktree-create.sh") {
+		worktreeCreateHooks = append(worktreeCreateHooks, map[string]interface{}{
+			"hooks": []map[string]interface{}{
+				{
+					"type":    "command",
+					"command": `"$CLAUDE_PROJECT_DIR"/.claude/hooks/grove-worktree-create.sh`,
+				},
+			},
+		})
+		hooks["WorktreeCreate"] = worktreeCreateHooks
+	}
+
+	// WorktreeRemove hook — auto-deregister Claude worktrees
+	worktreeRemoveHooks := getOrCreateHookArray(hooks, "WorktreeRemove")
+	if !hasGroveHook(worktreeRemoveHooks, "grove-worktree-remove.sh") {
+		worktreeRemoveHooks = append(worktreeRemoveHooks, map[string]interface{}{
+			"hooks": []map[string]interface{}{
+				{
+					"type":    "command",
+					"command": `"$CLAUDE_PROJECT_DIR"/.claude/hooks/grove-worktree-remove.sh`,
+				},
+			},
+		})
+		hooks["WorktreeRemove"] = worktreeRemoveHooks
+	}
+
 	settings["hooks"] = hooks
 
 	// Write updated settings
@@ -337,10 +411,12 @@ func runHooksInstall(cmd *cobra.Command, args []string) error {
 	fmt.Println("✓ Installed Grove hooks for Claude Code")
 	fmt.Println()
 	fmt.Println("Hooks installed:")
-	fmt.Println("  - SessionStart: Shows grove server status")
-	fmt.Println("  - PreToolUse:   Suggests 'grove start' for dev server commands")
-	fmt.Println("  - PreToolUse:   Suggests 'grove new' for git worktree commands")
-	fmt.Println("  - Stop:         Reminds about documentation updates")
+	fmt.Println("  - SessionStart:    Shows grove server status")
+	fmt.Println("  - PreToolUse:      Suggests 'grove start' for dev server commands")
+	fmt.Println("  - PreToolUse:      Suggests 'grove new' for git worktree commands")
+	fmt.Println("  - Stop:            Reminds about documentation updates")
+	fmt.Println("  - WorktreeCreate:  Auto-registers Claude worktrees with grove")
+	fmt.Println("  - WorktreeRemove:  Auto-deregisters Claude worktrees from grove")
 	fmt.Println()
 	fmt.Println("Files created:")
 	fmt.Println("  - .claude/settings.json")
@@ -348,6 +424,8 @@ func runHooksInstall(cmd *cobra.Command, args []string) error {
 	fmt.Println("  - .claude/hooks/grove-dev-server.sh")
 	fmt.Println("  - .claude/hooks/grove-worktree.sh")
 	fmt.Println("  - .claude/hooks/grove-doc-reminder.sh")
+	fmt.Println("  - .claude/hooks/grove-worktree-create.sh")
+	fmt.Println("  - .claude/hooks/grove-worktree-remove.sh")
 	fmt.Println()
 	fmt.Println("Note: Add .claude/settings.json to git to share hooks with your team.")
 	fmt.Println("      Add .claude/hooks/ to git as well.")
@@ -407,6 +485,8 @@ func runHooksUninstall(cmd *cobra.Command, args []string) error {
 		"grove-dev-server.sh",
 		"grove-worktree.sh",
 		"grove-doc-reminder.sh",
+		"grove-worktree-create.sh",
+		"grove-worktree-remove.sh",
 	}
 
 	for _, name := range groveHooks {
@@ -495,14 +575,5 @@ func filterOutGroveHooks(hooks []interface{}) []interface{} {
 }
 
 func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(s, substr)
 }
