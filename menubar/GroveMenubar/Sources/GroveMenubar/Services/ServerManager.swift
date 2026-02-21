@@ -366,9 +366,7 @@ class ServerManager: ObservableObject {
                 guard let self else { return }
                 switch stopResult {
                 case .success:
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                        self.startServer(server, portOverride: portOverride)
-                    }
+                    self.startServer(server, portOverride: portOverride)
                 case .failure(let error):
                     self.reportError("Failed to stop \(server.name): \(error.localizedDescription)")
                     self.refresh()

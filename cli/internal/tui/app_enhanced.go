@@ -408,6 +408,18 @@ func (m EnhancedModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.notification = NewNotification(msg.Message, msg.Type)
 		return m, nil
 
+	case syncPortsCompleteMsg:
+		m.notification = NewNotification(msg.notification.Message, msg.notification.Type)
+		if msg.reload {
+			if reg, err := registry.Load(); err == nil {
+				m.reg = reg
+				if m.list.FilterState() == list.Unfiltered {
+					m.list.SetItems(makeEnhancedItems(m.reg))
+				}
+			}
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		// When actively filtering (typing in filter input), let the list handle most keys
 		// But when filter is just "applied" (showing results), allow action keys
@@ -697,25 +709,23 @@ func (m *EnhancedModel) syncSelectedServerPorts() tea.Cmd {
 			if msg == "" {
 				msg = err.Error()
 			}
-			return NotificationMsg{
-				Message: fmt.Sprintf("Port sync failed for %s: %s", server.Name, msg),
-				Type:    NotificationError,
-			}
-		}
-
-		if reg, loadErr := registry.Load(); loadErr == nil {
-			m.reg = reg
-			if m.list.FilterState() == list.Unfiltered {
-				m.list.SetItems(makeEnhancedItems(m.reg))
+			return syncPortsCompleteMsg{
+				notification: NotificationMsg{
+					Message: fmt.Sprintf("Port sync failed for %s: %s", server.Name, msg),
+					Type:    NotificationError,
+				},
 			}
 		}
 
 		outputText := strings.TrimSpace(string(output))
 		syncedMarker := fmt.Sprintf("✓ %s: synced", server.Name)
 		if strings.Contains(outputText, syncedMarker) {
-			return NotificationMsg{
-				Message: fmt.Sprintf("Synced port for %s", server.Name),
-				Type:    NotificationSuccess,
+			return syncPortsCompleteMsg{
+				notification: NotificationMsg{
+					Message: fmt.Sprintf("Synced port for %s", server.Name),
+					Type:    NotificationSuccess,
+				},
+				reload: true,
 			}
 		}
 
@@ -724,9 +734,11 @@ func (m *EnhancedModel) syncSelectedServerPorts() tea.Cmd {
 			outputText = fmt.Sprintf("No port change for %s", server.Name)
 		}
 
-		return NotificationMsg{
-			Message: outputText,
-			Type:    NotificationInfo,
+		return syncPortsCompleteMsg{
+			notification: NotificationMsg{
+				Message: outputText,
+				Type:    NotificationInfo,
+			},
 		}
 	}
 }

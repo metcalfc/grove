@@ -74,6 +74,15 @@ type NotificationMsg struct {
 	Type    NotificationType
 }
 
+// syncPortsCompleteMsg is returned by the sync-ports tea.Cmd so that both
+// the notification display and the registry reload happen safely in Update(),
+// not inside the goroutine managed by Bubbletea.
+type syncPortsCompleteMsg struct {
+	notification NotificationMsg
+	// reload indicates the registry should be refreshed after displaying the notification.
+	reload bool
+}
+
 // ActionPanel represents the quick actions panel
 type ActionPanel struct {
 	Actions []Action

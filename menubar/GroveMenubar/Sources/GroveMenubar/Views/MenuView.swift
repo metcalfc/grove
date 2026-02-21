@@ -157,8 +157,13 @@ struct MenuView: View {
     }
 
     // Unpinned servers in the exact visual order used by the list.
+    // Must match what the view actually renders so keyboard nav indices stay in sync.
     private var renderedUnpinnedServers: [Server] {
         if groupedUnpinnedServers.isEmpty {
+            // Flat layout: exclude stopped servers when their section is collapsed.
+            if isStoppedCollapsed {
+                return unpinnedFilteredServers.filter { $0.isRunning }
+            }
             return unpinnedFilteredServers
         }
         return groupedUnpinnedServers.flatMap(\.servers)

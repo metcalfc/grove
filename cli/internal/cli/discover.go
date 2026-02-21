@@ -178,11 +178,6 @@ func runDiscover(cmd *cobra.Command, args []string) error {
 
 		// Determine command
 		cmdToUse := command
-		if cmdToUse == "" && wt.HasConfig {
-			// Try to load from .grove.yaml
-			// For now, just note it has a config
-			cmdToUse = "" // Will be loaded when starting
-		}
 
 		// Create server entry
 		server := &registry.Server{
