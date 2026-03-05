@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/iheanyi/grove/internal/config"
 	"github.com/iheanyi/grove/internal/registry"
 	"github.com/iheanyi/grove/internal/worktree"
 	"github.com/spf13/cobra"
@@ -141,21 +142,102 @@ func findWorktree(mainRepoPath, worktreeName string) (string, error) {
 	return "", fmt.Errorf("worktree '%s' not found\nUse 'git worktree list' to see available worktrees", worktreeName)
 }
 
-// openTerminal opens a new terminal window/tab on the current platform
+// openTerminal opens a new terminal window/tab using the configured terminal
 func openTerminal(path string) error {
-	switch runtime.GOOS {
-	case "darwin":
-		return openMacOSTerminal(path)
-	case "linux":
-		return openLinuxTerminal(path)
+	cfg, _ := config.Load("")
+	terminal := cfg.Terminal
+
+	// Auto-detect if not configured
+	if terminal == "" {
+		terminal = detectTerminal()
+	}
+
+	switch terminal {
+	case "ghostty":
+		return openGhostty(path)
+	case "iterm":
+		return openITerm(path)
+	case "warp":
+		return openWarp(path)
+	case "terminal":
+		return openAppleTerminal(path)
 	default:
-		return fmt.Errorf("unsupported platform: %s\nPlease open the terminal manually at: %s", runtime.GOOS, path)
+		if runtime.GOOS == "linux" {
+			return openLinuxTerminal(path)
+		}
+		return openAppleTerminal(path)
 	}
 }
 
-// openMacOSTerminal opens a new Terminal tab on macOS
-func openMacOSTerminal(path string) error {
-	// AppleScript to open a new Terminal tab and cd to the directory
+// detectTerminal returns the best available terminal on the current platform
+func detectTerminal() string {
+	if runtime.GOOS == "darwin" {
+		if _, err := os.Stat("/Applications/Ghostty.app"); err == nil {
+			return "ghostty"
+		}
+		return "terminal"
+	}
+	return "linux"
+}
+
+func openGhostty(path string) error {
+	// Try CLI first
+	ghosttyPaths := []string{
+		"/Applications/Ghostty.app/Contents/MacOS/ghostty",
+		"/opt/homebrew/bin/ghostty",
+		filepath.Join(os.Getenv("HOME"), ".local/bin/ghostty"),
+	}
+
+	for _, p := range ghosttyPaths {
+		if _, err := os.Stat(p); err == nil {
+			cmd := exec.Command(p, "--working-directory="+path)
+			return cmd.Start()
+		}
+	}
+
+	// Fallback: open via AppleScript
+	script := fmt.Sprintf(`
+		tell application "Ghostty"
+			activate
+		end tell
+		delay 0.5
+		tell application "System Events"
+			keystroke "cd %s" & return
+		end tell
+	`, shellEscape(path))
+
+	return exec.Command("osascript", "-e", script).Run()
+}
+
+func openITerm(path string) error {
+	script := fmt.Sprintf(`
+		tell application "iTerm"
+			activate
+			try
+				set newWindow to (create window with default profile)
+				tell current session of newWindow
+					write text "cd %s; clear"
+				end tell
+			on error
+				tell current window
+					create tab with default profile
+					tell current session
+						write text "cd %s; clear"
+					end tell
+				end tell
+			end try
+		end tell
+	`, shellEscape(path), shellEscape(path))
+
+	return exec.Command("osascript", "-e", script).Run()
+}
+
+func openWarp(path string) error {
+	cmd := exec.Command("open", "-a", "Warp", path)
+	return cmd.Run()
+}
+
+func openAppleTerminal(path string) error {
 	script := fmt.Sprintf(`
 		tell application "Terminal"
 			activate
@@ -167,28 +249,23 @@ func openMacOSTerminal(path string) error {
 
 	cmd := exec.Command("osascript", "-e", script)
 	if err := cmd.Run(); err != nil {
-		// Fallback: try opening a new window if tab fails
 		script = fmt.Sprintf(`
 			tell application "Terminal"
 				activate
 				do script "cd %s; clear"
 			end tell
 		`, shellEscape(path))
-
-		cmd = exec.Command("osascript", "-e", script)
-		return cmd.Run()
+		return exec.Command("osascript", "-e", script).Run()
 	}
-
 	return nil
 }
 
-// openLinuxTerminal opens a new terminal on Linux
 func openLinuxTerminal(path string) error {
-	// Try common terminal emulators
 	terminals := []struct {
 		name string
 		args []string
 	}{
+		{"ghostty", []string{"--working-directory=" + path}},
 		{"gnome-terminal", []string{"--working-directory=" + path}},
 		{"konsole", []string{"--workdir", path}},
 		{"xfce4-terminal", []string{"--working-directory=" + path}},
@@ -196,7 +273,6 @@ func openLinuxTerminal(path string) error {
 	}
 
 	for _, term := range terminals {
-		// Check if terminal exists
 		if _, err := exec.LookPath(term.name); err == nil {
 			cmd := exec.Command(term.name, term.args...)
 			if err := cmd.Start(); err == nil {
