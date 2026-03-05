@@ -50,7 +50,7 @@ class ServerManager: ObservableObject {
         // Find grove binary synchronously from known paths (fast, no process spawn)
         // We avoid running `which` here to prevent blocking the main thread
         let findStart = CFAbsoluteTimeGetCurrent()
-        self.grovePath = Self.findGroveBinaryFast() ?? "/usr/local/bin/grove"
+        self.grovePath = Self.findGroveBinaryFast() ?? "\(NSHomeDirectory())/.local/bin/grove"
         print("[Grove] findGroveBinaryFast took \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - findStart))s -> \(grovePath)")
 
         // If binary wasn't found via fast lookup, try `which` in background
@@ -1335,6 +1335,55 @@ class ServerManager: ObservableObject {
         }
     }
 
+    /// Get the user's shell PATH by running a login shell.
+    /// Cached after first call since PATH doesn't change during app lifetime.
+    private static var _cachedShellEnvironment: [String: String]?
+    private static let envLock = NSLock()
+
+    private static func shellEnvironment() -> [String: String] {
+        envLock.lock()
+        defer { envLock.unlock() }
+
+        if let cached = _cachedShellEnvironment {
+            return cached
+        }
+
+        // Determine user's shell
+        let userShell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: userShell)
+        // Login interactive shell that prints env
+        task.arguments = ["-l", "-c", "env"]
+
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = Pipe()
+
+        var env: [String: String] = ProcessInfo.processInfo.environment
+
+        do {
+            try task.run()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            task.waitUntilExit()
+
+            if let output = String(data: data, encoding: .utf8) {
+                for line in output.components(separatedBy: "\n") {
+                    if let eqIdx = line.firstIndex(of: "=") {
+                        let key = String(line[line.startIndex..<eqIdx])
+                        let value = String(line[line.index(after: eqIdx)...])
+                        env[key] = value
+                    }
+                }
+            }
+        } catch {
+            print("[Grove] Failed to get shell environment: \(error)")
+        }
+
+        _cachedShellEnvironment = env
+        return env
+    }
+
     /// Run a process with timeout to prevent indefinite hangs
     private static func runProcessWithTimeout(
         executablePath: String,
@@ -1350,6 +1399,7 @@ class ServerManager: ObservableObject {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: executablePath)
         task.arguments = args
+        task.environment = shellEnvironment()
 
         if let workingDirectory = workingDirectory {
             task.currentDirectoryURL = URL(fileURLWithPath: workingDirectory)
@@ -1439,10 +1489,9 @@ class ServerManager: ObservableObject {
 
         // Common install locations as fallbacks
         let paths = [
-            "/usr/local/bin/grove",
+            "\(NSHomeDirectory())/.local/bin/grove",
             "/opt/homebrew/bin/grove",
-            "\(NSHomeDirectory())/go/bin/grove",
-            "\(NSHomeDirectory())/.local/bin/grove"
+            "/usr/local/bin/grove"
         ]
 
         for path in paths {

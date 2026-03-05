@@ -146,7 +146,7 @@ class PreferencesManager: ObservableObject {
         self.notifyOnServerCrash = defaults.object(forKey: Keys.notifyOnServerCrash) as? Bool ?? true
         self.refreshInterval = defaults.object(forKey: Keys.refreshInterval) as? Double ?? 5.0
         self.defaultBrowser = defaults.string(forKey: Keys.defaultBrowser) ?? "system"
-        self.defaultTerminal = defaults.string(forKey: Keys.defaultTerminal) ?? "com.apple.Terminal"
+        self.defaultTerminal = defaults.string(forKey: Keys.defaultTerminal) ?? "com.mitchellh.ghostty"
 
         let themeString = defaults.string(forKey: Keys.theme) ?? AppTheme.system.rawValue
         self.theme = AppTheme(rawValue: themeString) ?? .system
