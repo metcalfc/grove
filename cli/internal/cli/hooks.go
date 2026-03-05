@@ -322,8 +322,12 @@ func runHooksInstall(cmd *cobra.Command, args []string) error {
 	sessionStartHooks := getOrCreateHookArray(hooks, "SessionStart")
 	if !hasGroveHook(sessionStartHooks, "grove-session-start.sh") {
 		sessionStartHooks = append(sessionStartHooks, map[string]interface{}{
-			"type":    "command",
-			"command": ".claude/hooks/grove-session-start.sh",
+			"hooks": []map[string]interface{}{
+				{
+					"type":    "command",
+					"command": ".claude/hooks/grove-session-start.sh",
+				},
+			},
 		})
 		hooks["SessionStart"] = sessionStartHooks
 	}
@@ -362,8 +366,12 @@ func runHooksInstall(cmd *cobra.Command, args []string) error {
 	stopHooks := getOrCreateHookArray(hooks, "Stop")
 	if !hasGroveHook(stopHooks, "grove-doc-reminder.sh") {
 		stopHooks = append(stopHooks, map[string]interface{}{
-			"type":    "command",
-			"command": ".claude/hooks/grove-doc-reminder.sh",
+			"hooks": []map[string]interface{}{
+				{
+					"type":    "command",
+					"command": ".claude/hooks/grove-doc-reminder.sh",
+				},
+			},
 		})
 		hooks["Stop"] = stopHooks
 	}
