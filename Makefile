@@ -62,6 +62,7 @@ install-cli: build-cli
 	@mkdir -p $(HOME)/.local/bin
 	@echo "Installing CLI to ~/.local/bin..."
 	cp cli/grove $(HOME)/.local/bin/grove
+	codesign -s - --force $(HOME)/.local/bin/grove
 	@echo "Installed: $(HOME)/.local/bin/grove"
 
 # Install menubar app to /Applications
