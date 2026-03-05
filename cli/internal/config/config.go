@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/adrg/xdg"
 	"gopkg.in/yaml.v3"
 )
 
@@ -53,6 +52,9 @@ type Config struct {
 	IdleTimeout        time.Duration `yaml:"idle_timeout"`
 	HealthCheckTimeout time.Duration `yaml:"health_check_timeout"`
 
+	// Terminal emulator for grove switch (ghostty, iterm, warp, terminal)
+	Terminal string `yaml:"terminal"`
+
 	// TUI settings
 	TUI TUIConfig `yaml:"tui"`
 
@@ -84,7 +86,7 @@ func Default() *Config {
 		TLD:                "localhost",
 		ProxyHTTPPort:      80,
 		ProxyHTTPSPort:     443,
-		LogDir:             filepath.Join(xdg.ConfigHome, "grove", "logs"),
+		LogDir:             filepath.Join(configHome(), "grove", "logs"),
 		LogMaxSize:         "10MB",
 		LogRetention:       "7d",
 		IdleTimeout:        30 * time.Minute,
@@ -103,9 +105,18 @@ func Default() *Config {
 	}
 }
 
+// configHome returns ~/.config, respecting XDG_CONFIG_HOME if set
+func configHome() string {
+	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" {
+		return dir
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".config")
+}
+
 // ConfigDir returns the grove configuration directory
 func ConfigDir() string {
-	return filepath.Join(xdg.ConfigHome, "grove")
+	return filepath.Join(configHome(), "grove")
 }
 
 // ConfigPath returns the path to the config file
