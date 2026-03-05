@@ -1,4 +1,4 @@
-.PHONY: all build build-cli build-menubar run run-menubar restart dev clean clean-cli clean-menubar kill release-menubar install-menubar
+.PHONY: all build build-web build-cli build-menubar run run-menubar restart dev clean clean-cli clean-menubar kill release-menubar install install-cli install-menubar uninstall
 
 # Default target: build both apps
 all: build
@@ -6,8 +6,14 @@ all: build
 # Build both CLI and menubar app
 build: build-cli build-menubar
 
-# Build Go CLI
-build-cli:
+# Build web dashboard (required by CLI)
+build-web:
+	@echo "Building web dashboard..."
+	cd cli/internal/dashboard/web && npm install --silent && npm run build --silent
+	@echo "Web dashboard built"
+
+# Build Go CLI (depends on web dashboard)
+build-cli: build-web
 	@echo "Building Go CLI..."
 	cd cli && go build -o grove ./cmd/grove
 	@echo "CLI built: cli/grove"
@@ -51,11 +57,12 @@ clean-menubar:
 	@echo "Cleaning menubar build..."
 	rm -rf menubar/GroveMenubar/.build
 
-# Install CLI to /usr/local/bin
+# Install CLI to ~/.local/bin
 install-cli: build-cli
-	@echo "Installing CLI to /usr/local/bin..."
-	cp cli/grove /usr/local/bin/grove
-	@echo "Installed: /usr/local/bin/grove"
+	@mkdir -p $(HOME)/.local/bin
+	@echo "Installing CLI to ~/.local/bin..."
+	cp cli/grove $(HOME)/.local/bin/grove
+	@echo "Installed: $(HOME)/.local/bin/grove"
 
 # Install menubar app to /Applications
 install-menubar:
@@ -73,6 +80,17 @@ install-menubar:
 	@echo "Installed: /Applications/Grove.app"
 	@echo ""
 	@echo "Note: First launch, right-click the app and select 'Open' to bypass Gatekeeper."
+
+# Install both CLI and menubar app
+install: install-cli install-menubar
+
+# Uninstall both
+uninstall:
+	@echo "Removing grove CLI..."
+	rm -f $(HOME)/.local/bin/grove
+	@echo "Removing Grove.app..."
+	rm -rf /Applications/Grove.app
+	@echo "Uninstalled"
 
 # Release menubar app via GitHub Actions
 release-menubar:
